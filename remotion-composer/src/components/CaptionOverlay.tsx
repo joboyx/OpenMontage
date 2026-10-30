@@ -42,7 +42,28 @@ type CaptionOverlayProps = {
   bottomOffset?: number;
   // Corner radius in px of the caption box (default 12; use a large value for a pill).
   borderRadius?: number;
+  // Base text direction. "auto" (default) picks RTL when most words of the
+  // captions are Arabic/Hebrew/Persian/Urdu. Each word is an
+  // inline-block, which the bidi algorithm treats as a neutral object, so
+  // without an explicit direction RTL words are laid out left-to-right and
+  // the sentence reads backwards.
+  direction?: "ltr" | "rtl" | "auto";
 };
+
+const RTL_CHAR = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+const LTR_CHAR = /[A-Za-z\u00C0-\u024F\u0370-\u03FF\u0400-\u04FF]/;
+
+function detectDirection(words: WordCaption[]): "ltr" | "rtl" {
+  // Count words, not first letter: Arabic captions often open with a Latin
+  // brand name ("OpenMontage يحوّل ...") and must still read right-to-left.
+  let rtl = 0;
+  let ltr = 0;
+  for (const w of words) {
+    if (RTL_CHAR.test(w.word)) rtl++;
+    else if (LTR_CHAR.test(w.word)) ltr++;
+  }
+  return rtl > ltr ? "rtl" : "ltr";
+}
 
 interface CaptionPage {
   words: WordCaption[];
@@ -124,6 +145,7 @@ const PageRenderer: React.FC<{
   wordSeparator: string;
   bottomOffset: number;
   borderRadius: number;
+  direction: "ltr" | "rtl";
 }> = ({
   page,
   fontSize,
@@ -134,6 +156,7 @@ const PageRenderer: React.FC<{
   wordSeparator,
   bottomOffset,
   borderRadius,
+  direction,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -156,7 +179,9 @@ const PageRenderer: React.FC<{
       }}
     >
       <div
+        dir={direction}
         style={{
+          direction,
           opacity: entrance,
           transform: `translateY(${interpolate(entrance, [0, 1], [20, 0])}px)`,
           backgroundColor,
@@ -231,9 +256,12 @@ export const CaptionOverlay: React.FC<CaptionOverlayProps> = ({
   wordSeparator = " ",
   bottomOffset = 80,
   borderRadius = 12,
+  direction = "auto",
 }) => {
   const { fps } = useVideoConfig();
   const pages = buildPages(words, wordsPerPage);
+  const resolvedDirection =
+    direction === "auto" ? detectDirection(words) : direction;
 
   return (
     <AbsoluteFill>
@@ -257,6 +285,7 @@ export const CaptionOverlay: React.FC<CaptionOverlayProps> = ({
               wordSeparator={wordSeparator}
               bottomOffset={bottomOffset}
               borderRadius={borderRadius}
+              direction={resolvedDirection}
             />
           </Sequence>
         );
