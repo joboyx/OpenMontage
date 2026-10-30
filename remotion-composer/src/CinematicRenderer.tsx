@@ -12,7 +12,14 @@ import {
   useVideoConfig,
 } from "remotion";
 
-import { CinematicRendererProps, CinematicTone, CinematicVideoScene } from "./cinematic/types";
+import { loadFont as loadPoppins } from "@remotion/google-fonts/Poppins";
+
+import {
+  CinematicEndCardScene,
+  CinematicRendererProps,
+  CinematicTone,
+  CinematicVideoScene,
+} from "./cinematic/types";
 import { CaptionOverlay } from "./components/CaptionOverlay";
 import { resolveAsset } from "./lib/resolveAsset";
 
@@ -71,6 +78,9 @@ const SceneVideo: React.FC<{ scene: CinematicVideoScene }> = ({ scene }) => {
       ? Math.round(scene.trimAfterSeconds * fps)
       : undefined;
 
+  // tone "none": the raw clip, with no grade and no overlay layers.
+  const ungraded = scene.tone === "none";
+
   return (
     <AbsoluteFill style={{ backgroundColor: "#020407", opacity }}>
       <OffthreadVideo
@@ -84,29 +94,34 @@ const SceneVideo: React.FC<{ scene: CinematicVideoScene }> = ({ scene }) => {
           height: "100%",
           objectFit: "cover",
           transform: `scale(${scale})`,
-          filter:
-            scene.filter ?? "contrast(1.06) saturate(0.88) brightness(0.92)",
+          filter: ungraded
+            ? scene.filter
+            : scene.filter ?? "contrast(1.06) saturate(0.88) brightness(0.92)",
         }}
       />
-      <AbsoluteFill
-        style={{
-          background: toneGradient(scene.tone ?? "cold"),
-          mixBlendMode: "multiply",
-        }}
-      />
-      <AbsoluteFill
-        style={{
-          background:
-            "radial-gradient(circle at center, transparent 52%, rgba(0,0,0,0.52) 100%)",
-        }}
-      />
-      <AbsoluteFill
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 8%, transparent 92%, rgba(255,255,255,0.02) 100%)",
-          opacity: 0.6,
-        }}
-      />
+      {ungraded ? null : (
+        <>
+          <AbsoluteFill
+            style={{
+              background: toneGradient(scene.tone ?? "cold"),
+              mixBlendMode: "multiply",
+            }}
+          />
+          <AbsoluteFill
+            style={{
+              background:
+                "radial-gradient(circle at center, transparent 52%, rgba(0,0,0,0.52) 100%)",
+            }}
+          />
+          <AbsoluteFill
+            style={{
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 8%, transparent 92%, rgba(255,255,255,0.02) 100%)",
+              opacity: 0.6,
+            }}
+          />
+        </>
+      )}
     </AbsoluteFill>
   );
 };
@@ -384,6 +399,70 @@ const TitleCard: React.FC<{
   );
 };
 
+// Poppins loads on first end-card render, not at module load: compositions
+// without an end card never fetch it, and the delayRender handle is created
+// after bundle evaluation (see lib/localFonts.ts for why that matters).
+let poppinsFamily: string | null = null;
+const usePoppins = (): string => {
+  if (poppinsFamily === null) {
+    poppinsFamily = loadPoppins("normal", {
+      weights: ["400", "700"],
+      subsets: ["latin"],
+    }).fontFamily;
+  }
+  return poppinsFamily;
+};
+
+const END_CARD_STAGGER_FRAMES = 3;
+const END_CARD_LINE_FRAMES = 12;
+
+const EndCard: React.FC<{ scene: CinematicEndCardScene }> = ({ scene }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const poppins = usePoppins();
+
+  return (
+    <AbsoluteFill
+      style={{
+        backgroundColor: scene.backgroundColor ?? "#F7F0E3",
+        justifyContent: "center",
+        alignItems: "center",
+        flexDirection: "column",
+      }}
+    >
+      {scene.lines.map((line, index) => {
+        // Lines enter one after another; the last settles ~0.6 s in.
+        const enter = spring({
+          frame: frame - index * END_CARD_STAGGER_FRAMES,
+          fps,
+          config: { damping: 200 },
+          durationInFrames: END_CARD_LINE_FRAMES,
+        });
+        return (
+          <div
+            key={index}
+            style={{
+              marginTop: line.marginTop ?? 0,
+              opacity: enter,
+              transform: `translateY(${interpolate(enter, [0, 1], [28, 0])}px)`,
+              fontFamily: poppins,
+              fontWeight: line.weight ?? 700,
+              fontSize: line.fontSize ?? 72,
+              color: line.color ?? "#5B3A23",
+              lineHeight: 1.2,
+              textAlign: "center",
+              whiteSpace: "pre-wrap",
+              maxWidth: "92%",
+            }}
+          >
+            {line.text}
+          </div>
+        );
+      })}
+    </AbsoluteFill>
+  );
+};
+
 const Soundtrack: React.FC<{
   src: string;
   volume: number;
@@ -496,6 +575,8 @@ export const CinematicRenderer: React.FC<CinematicRendererProps> = ({
         >
           {scene.kind === "video" ? (
             <SceneVideo scene={scene} />
+          ) : scene.kind === "endcard" ? (
+            <EndCard scene={scene} />
           ) : (
             <TitleCard
               text={scene.text}
@@ -521,6 +602,8 @@ export const CinematicRenderer: React.FC<CinematicRendererProps> = ({
           color={captions.color ?? "#F8FAFC"}
           highlightColor={captions.highlightColor ?? "#FBBF24"}
           backgroundColor={captions.backgroundColor ?? "rgba(0, 0, 0, 0.6)"}
+          bottomOffset={captions.bottomOffset}
+          borderRadius={captions.borderRadius}
         />
       ) : null}
     </AbsoluteFill>
