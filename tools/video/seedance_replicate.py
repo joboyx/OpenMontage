@@ -3,6 +3,7 @@
 Replicate hosts ByteDance's published Seedance 2.0 models:
   - bytedance/seedance-2.0        (standard)
   - bytedance/seedance-2.0-fast   (fast tier)
+  - bytedance/seedance-2.0-mini   (mini tier, lowest cost)
 
 Same model family as the fal.ai path (tools/video/seedance_video.py) —
 if you have both FAL_KEY and REPLICATE_API_TOKEN the scoring engine
@@ -11,6 +12,8 @@ deduplicates by provider=seedance and picks whichever registers first.
 
 from __future__ import annotations
 
+import base64
+import mimetypes
 import os
 import time
 from pathlib import Path
@@ -28,6 +31,24 @@ from tools.base_tool import (
     ToolStatus,
     ToolTier,
 )
+
+_MODEL_SLUGS = {
+    "standard": "bytedance/seedance-2.0",
+    "fast": "bytedance/seedance-2.0-fast",
+    "mini": "bytedance/seedance-2.0-mini",
+}
+
+# Replicate billing, USD per second of output video: (no video input, with video input).
+_USD_PER_SECOND = {
+    "standard": {
+        "480p": (0.08, 0.10),
+        "720p": (0.18, 0.22),
+        "1080p": (0.45, 0.55),
+        "4k": (1.00, 1.25),
+    },
+    "fast": {"480p": (0.07, 0.08), "720p": (0.15, 0.17)},
+    "mini": {"480p": (0.04, 0.05), "720p": (0.09, 0.11)},
+}
 
 
 class SeedanceReplicate(BaseTool):
@@ -84,9 +105,12 @@ class SeedanceReplicate(BaseTool):
             },
             "model_variant": {
                 "type": "string",
-                "enum": ["standard", "fast"],
+                "enum": ["standard", "fast", "mini"],
                 "default": "standard",
-                "description": "standard = bytedance/seedance-2.0, fast = bytedance/seedance-2.0-fast",
+                "description": (
+                    "standard = bytedance/seedance-2.0, fast = bytedance/seedance-2.0-fast, "
+                    "mini = bytedance/seedance-2.0-mini"
+                ),
             },
             "duration": {
                 "type": "string",
@@ -111,6 +135,16 @@ class SeedanceReplicate(BaseTool):
                 "type": "string",
                 "description": "Start frame image URL for image_to_video",
             },
+            "reference_images": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 9,
+                "description": (
+                    "Reference images as local paths, http(s) URLs or data URIs. "
+                    "Cite them in the prompt as [Image1], [Image2], ... "
+                    "Cannot be combined with image_url (first frame)."
+                ),
+            },
             "seed": {"type": "integer"},
             "output_path": {"type": "string"},
         },
@@ -120,7 +154,9 @@ class SeedanceReplicate(BaseTool):
         cpu_cores=1, ram_mb=512, vram_mb=0, disk_mb=500, network_required=True
     )
     retry_policy = RetryPolicy(max_retries=2, retryable_errors=["rate_limit", "timeout"])
-    idempotency_key_fields = ["prompt", "model_variant", "operation", "duration", "seed"]
+    idempotency_key_fields = [
+        "prompt", "model_variant", "operation", "duration", "seed", "reference_images",
+    ]
     side_effects = ["writes video file to output_path", "calls Replicate API"]
     user_visible_verification = [
         "Watch generated clip for motion coherence, audio sync, and visual quality"
@@ -134,14 +170,29 @@ class SeedanceReplicate(BaseTool):
 
     def estimate_cost(self, inputs: dict[str, Any]) -> float:
         variant = inputs.get("model_variant", "standard")
+        resolution = inputs.get("resolution", "720p")
         duration = inputs.get("duration", "5")
         secs = 5 if duration == "auto" else int(duration)
-        # Replicate bills per-second at roughly the same rate as fal.ai for this model family.
-        rate = 0.24 if variant == "fast" else 0.30
+        # Replicate bills per second of output video; a reference video input costs more.
+        video_in = bool(inputs.get("reference_videos"))
+        rates = _USD_PER_SECOND.get(variant, _USD_PER_SECOND["standard"])
+        rate = rates.get(resolution, rates["720p"])[1 if video_in else 0]
         return round(rate * secs, 2)
 
     def estimate_runtime(self, inputs: dict[str, Any]) -> float:
         return 60.0 if inputs.get("model_variant") == "fast" else 120.0
+
+    @staticmethod
+    def _to_image_uri(ref: str) -> str:
+        """Pass URLs and data URIs through; inline a local file as a data URI."""
+        if ref.startswith(("http://", "https://", "data:")):
+            return ref
+        path = Path(ref)
+        mime_type, _ = mimetypes.guess_type(path.name)
+        if not mime_type:
+            mime_type = "application/octet-stream"
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        return f"data:{mime_type};base64,{encoded}"
 
     def execute(self, inputs: dict[str, Any]) -> ToolResult:
         token = self._get_api_token()
@@ -155,9 +206,12 @@ class SeedanceReplicate(BaseTool):
 
         start = time.time()
         variant = inputs.get("model_variant", "standard")
-        model_slug = (
-            "bytedance/seedance-2.0-fast" if variant == "fast" else "bytedance/seedance-2.0"
-        )
+        model_slug = _MODEL_SLUGS.get(variant)
+        if model_slug is None:
+            return ToolResult(
+                success=False,
+                error=f"Unknown model_variant {variant!r}; expected one of {sorted(_MODEL_SLUGS)}",
+            )
 
         payload_input: dict[str, Any] = {"prompt": inputs["prompt"]}
         if inputs.get("duration") and inputs["duration"] != "auto":
@@ -172,6 +226,25 @@ class SeedanceReplicate(BaseTool):
             payload_input["seed"] = inputs["seed"]
         if inputs.get("operation") == "image_to_video" and inputs.get("image_url"):
             payload_input["image"] = inputs["image_url"]
+
+        reference_images = inputs.get("reference_images") or []
+        if reference_images:
+            if len(reference_images) > 9:
+                return ToolResult(
+                    success=False,
+                    error=f"Seedance 2.0 accepts at most 9 reference_images, got {len(reference_images)}",
+                )
+            if "image" in payload_input:
+                return ToolResult(
+                    success=False,
+                    error="reference_images cannot be combined with image_url (image_to_video first frame)",
+                )
+            try:
+                payload_input["reference_images"] = [
+                    self._to_image_uri(ref) for ref in reference_images
+                ]
+            except OSError as e:
+                return ToolResult(success=False, error=f"Cannot read reference image: {e}")
 
         headers = {
             "Authorization": f"Bearer {token}",
@@ -241,6 +314,7 @@ class SeedanceReplicate(BaseTool):
                 "resolution": inputs.get("resolution", "720p"),
                 "generate_audio": inputs.get("generate_audio", True),
                 "seed": pred.get("input", {}).get("seed"),
+                "reference_image_count": len(reference_images),
                 "output": str(output_path),
                 "output_path": str(output_path),
                 "format": "mp4",
