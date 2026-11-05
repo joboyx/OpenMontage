@@ -203,6 +203,42 @@ class VideoCompose(BaseTool):
                     "networks). The subprocess timeout is widened to match."
                 ),
             },
+            "render_speed": {
+                "type": "object",
+                "description": (
+                    "Remotion speed options for remotion_render (atelier mode reads "
+                    "the same keys from edit_decisions.bespoke). Use frames or a "
+                    "still for checks, draft for review passes, and none of them "
+                    "for the final render."
+                ),
+                "properties": {
+                    "frames": {
+                        "description": (
+                            "Render only this frame or range: 120, \"100-220\" or "
+                            "[100, 220]. Passed as --frames."
+                        ),
+                    },
+                    "draft": {
+                        "type": "boolean",
+                        "description": (
+                            "Fast review render: scale 0.5 and x264 preset "
+                            "veryfast, unless scale or x264_preset is set."
+                        ),
+                    },
+                    "scale": {"type": "number", "description": "--scale, e.g. 0.5"},
+                    "concurrency": {
+                        "description": "--concurrency: an int or a percentage string such as \"75%\"",
+                    },
+                    "x264_preset": {
+                        "type": "string",
+                        "description": "--x264-preset, e.g. veryfast for drafts",
+                    },
+                    "gl": {
+                        "type": "string",
+                        "description": "--gl renderer, e.g. angle",
+                    },
+                },
+            },
         },
     }
 
@@ -956,7 +992,11 @@ class VideoCompose(BaseTool):
                                avoids copying the bloated shared public/>,
             "scale":          <optional float, e.g. 0.5 for a fast draft>,
             "crf":            <optional int, e.g. 18 for a crisp final>,
-            "concurrency":    <optional int>,
+            "concurrency":    <optional int or percentage string>,
+            "frames":         <optional frame or range for checks, e.g. "100-220">,
+            "draft":          <optional bool: scale 0.5 + x264 preset veryfast>,
+            "x264_preset":    <optional str, e.g. "veryfast">,
+            "gl":             <optional str, e.g. "angle">,
         }
         """
         bespoke = edit_decisions.get("bespoke") or {}
@@ -1036,12 +1076,9 @@ class VideoCompose(BaseTool):
             if pd.exists():
                 cmd.append(f"--public-dir={pd}")
 
-        if bespoke.get("scale"):
-            cmd.append(f"--scale={bespoke['scale']}")
         if bespoke.get("crf") is not None:
             cmd.append(f"--crf={bespoke['crf']}")
-        if bespoke.get("concurrency"):
-            cmd.append(f"--concurrency={bespoke['concurrency']}")
+        cmd.extend(self._remotion_speed_flags(bespoke))
 
         try:
             # Run from inside the composer dir so npx resolves the local
@@ -1941,6 +1978,43 @@ class VideoCompose(BaseTool):
 
         return render_result
 
+    @staticmethod
+    def _remotion_speed_flags(opts: dict[str, Any]) -> list[str]:
+        """Build the Remotion CLI flags that make a render faster.
+
+        A full render redraws every frame in headless Chrome, so checks should
+        render only the frames they inspect (``frames``) and review passes
+        should use ``draft``. ``draft`` sets scale 0.5 and x264 preset
+        veryfast; an explicit ``scale`` or ``x264_preset`` wins over it.
+
+        Args:
+            opts: ``render_speed`` input, or ``edit_decisions.bespoke``.
+
+        Returns:
+            CLI flags in ``--name=value`` form, empty when no option is set.
+        """
+        flags: list[str] = []
+        frames = opts.get("frames")
+        if isinstance(frames, (list, tuple)):
+            if len(frames) != 2:
+                raise ValueError(f"render frames range needs [start, end], got {frames!r}")
+            frames = f"{int(frames[0])}-{int(frames[1])}"
+        if frames is not None and frames != "":
+            flags.append(f"--frames={frames}")
+
+        draft = bool(opts.get("draft"))
+        scale = opts.get("scale") or (0.5 if draft else None)
+        if scale:
+            flags.append(f"--scale={scale}")
+        x264_preset = opts.get("x264_preset") or ("veryfast" if draft else None)
+        if x264_preset:
+            flags.append(f"--x264-preset={x264_preset}")
+        if opts.get("concurrency"):
+            flags.append(f"--concurrency={opts['concurrency']}")
+        if opts.get("gl"):
+            flags.append(f"--gl={opts['gl']}")
+        return flags
+
     def _remotion_render(self, inputs: dict[str, Any]) -> ToolResult:
         """Render via Remotion (requires Node.js + npx).
 
@@ -2070,6 +2144,8 @@ class VideoCompose(BaseTool):
                     cmd.extend(["--width", str(p.width), "--height", str(p.height)])
                 except (ImportError, ValueError):
                     pass
+
+            cmd.extend(self._remotion_speed_flags(inputs.get("render_speed") or {}))
 
             # Optional creator-facing render timeout. Remotion's `--timeout` (ms)
             # governs headless-browser setup and delayRender(); on slow machines or
