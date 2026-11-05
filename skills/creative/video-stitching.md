@@ -102,6 +102,12 @@ into longer sequences requires special care to maintain visual continuity.
 - Motion direction may not match — review last/first frames for jarring movement reversals
 - Audio (if any) will not be continuous — strip AI audio and use a single music/narration track
 
+**Image-to-video chains of one continuous shot:** image-to-video models start each clip
+softly (measured on Seedance 2.0: frames 0-2 at about 50% sharpness, a 3-7 level
+brightness slide), so a hard cut flickers at every join. Chain from a frame about 1 s
+before the end and join with `clip_join` (`overlap_frames`), or blend with
+`overlap_frames: 0`. Full workflow, sound included: `skills/creative/chained-clip-continuity.md`.
+
 ### 4. Hybrid Stitching
 
 Sequential flow with spatial inserts at specific moments.

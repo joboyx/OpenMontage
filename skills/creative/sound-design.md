@@ -139,3 +139,10 @@ When the **audio_mixer** tool is used in the compose stage:
 6. Keep true peak below -1.5 dBTP
 7. For AI TTS narration, apply the processing chain above before mixing
 8. Test the final mix on phone speakers — most viewers watch on mobile
+
+For generated ambience over a timeline joined from several generated clips, use
+**ambience_windows** instead of one sound pass per clip: per-clip passes change sound
+character at every join. `generate` runs MMAudio over 10 s windows every 5 s, so each join
+sits mid-window; `shape` cross-fades the windows with equal power and moves the smoothed
+level onto a planned curve (short hits such as thunder survive). Settings and checks:
+`skills/creative/chained-clip-continuity.md`.
