@@ -420,23 +420,7 @@ See `remotion-composer/SCENE_TYPES.md` for the authoritative list and their cut 
 
 These stock scene-types are the **templated** path — fast and reliable, but they are why videos look alike. For **hero work, prefer atelier mode** (hand-authored composition) over this catalog; read those types as a *mechanics codex*, not a menu to assemble. See "Composition Authoring Mode" above and `skills/meta/bespoke-composition.md`.
 
-### Remotion render speed (HARD RULE)
-
-A Remotion render draws every frame in headless Chrome, so a full render takes about as long as the video plays. Render the full video at full size **only for the final cut**. For everything else, render less:
-
-| Purpose | `video_compose` input | CLI equivalent (run in `remotion-composer/`) |
-| --- | --- | --- |
-| Check one frame (a join, a title, a color) | — | `npx remotion still <entry> <comp> out.png --frame=600 --props=<props>` |
-| Check a join or one scene | `render_speed: {"frames": "540-660"}` | `--frames=540-660` |
-| Review pass of the whole video | `render_speed: {"draft": true}` (scale 0.5, x264 preset veryfast) | `--scale=0.5 --x264-preset=veryfast` |
-| Final cut | no `render_speed` | — |
-
-Atelier mode reads the same keys (`frames`, `draft`, `scale`, `x264_preset`, `concurrency`, `gl`) from `edit_decisions.bespoke`.
-
-Measured on a 63 s, 1080x1920, 30 fps CinematicRenderer video (Apple M5 Pro): full render 55 s, `draft` 22 s, `frames` 540-660 (4 s of video) 6 s.
-
-- Do not raise `concurrency` without a benchmark on an idle machine (`npx remotion benchmark`). On a loaded machine, concurrency 12 was slower than the default.
-- Before you send a draft or a frame-range file to the user, say that it is not the final render.
+**Render the full video at full size only for the final cut.** Checks use a still or a frame range, review passes use a draft (`video_compose` `render_speed`). See `skills/core/remotion.md` § Render Speed.
 
 **When Remotion is NOT available** and `render_runtime="remotion"` was NOT locked, `video_compose` may use FFmpeg Ken Burns motion on still images. This still works but produces less engaging visuals. Mention this tradeoff in the proposal. When `render_runtime="remotion"` IS locked and Remotion is unavailable, that's a blocker — escalate, don't silently swap.
 

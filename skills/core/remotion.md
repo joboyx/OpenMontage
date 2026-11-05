@@ -200,6 +200,24 @@ npx remotion render Explainer \
 
 In Python, invoke via `subprocess` from `video_compose.py` when `backend="remotion"`.
 
+### Render Speed (mandatory for checks and review passes)
+
+A Remotion render draws every frame in headless Chrome, so a full render takes about as long as the video plays. Render the full video at full size **only for the final cut**. For everything else, render less:
+
+| Purpose | `video_compose` input | CLI equivalent (run in `remotion-composer/`) |
+| --- | --- | --- |
+| Check one frame (a join, a title, a color) | — | `npx remotion still <entry> <comp> out.png --frame=600 --props=<props>` |
+| Check a join or one scene | `render_speed: {"frames": "540-660"}` | `--frames=540-660` |
+| Review pass of the whole video | `render_speed: {"draft": true}` (scale 0.5, x264 preset veryfast) | `--scale=0.5 --x264-preset=veryfast` |
+| Final cut | no `render_speed` | — |
+
+Atelier mode reads the same keys (`frames`, `draft`, `scale`, `x264_preset`, `concurrency`, `gl`) from `edit_decisions.bespoke`.
+
+Measured on a 63 s, 1080x1920, 30 fps CinematicRenderer video (Apple M5 Pro): full render 55 s, `draft` 22 s, `frames` 540-660 (4 s of video) 6 s.
+
+- Do not raise `concurrency` without a benchmark on an idle machine (`npx remotion benchmark`). On a loaded machine, concurrency 12 was slower than the default.
+- Before you send a draft or a frame-range file to the user, say that it is not the final render. The Post-Render Verification Protocol below applies to the final render.
+
 ### Media Profile Mapping
 
 | OpenMontage Profile | Remotion Config |
