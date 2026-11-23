@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import unquote, urlsplit
 
+from lib.render_profile import remotion_encode_flags
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -236,6 +237,20 @@ class VideoCompose(BaseTool):
                     "gl": {
                         "type": "string",
                         "description": "--gl renderer, e.g. angle",
+                    },
+                    "encode": {
+                        "type": "string",
+                        "enum": ["auto", "crf"],
+                        "default": "auto",
+                        "description": (
+                            "Final-render encoder. auto: on macOS with VideoToolbox, "
+                            "use hardware H.264 at 16 Mb/s plus extra OffthreadVideo "
+                            "decode threads (lib/render_profile.py); elsewhere "
+                            "Remotion's CPU x264/CRF defaults. crf: always keep "
+                            "x264/CRF output, e.g. when an exact CRF file is needed. "
+                            "Draft, frames, scale, x264_preset and crf renders never "
+                            "use the hardware encoder."
+                        ),
                     },
                 },
             },
@@ -1987,12 +2002,26 @@ class VideoCompose(BaseTool):
         should use ``draft``. ``draft`` sets scale 0.5 and x264 preset
         veryfast; an explicit ``scale`` or ``x264_preset`` wins over it.
 
+        A final-quality render (no ``draft``, ``frames``, ``scale``,
+        ``x264_preset`` or ``crf``, and ``encode`` is not ``"crf"``) also gets
+        ``lib.render_profile.remotion_encode_flags()``: hardware H.264 encode
+        plus extra OffthreadVideo decode threads on macOS, nothing elsewhere.
+        ``encode: "crf"`` opts out and keeps Remotion's x264/CRF output.
+
         Args:
             opts: ``render_speed`` input, or ``edit_decisions.bespoke``.
 
         Returns:
-            CLI flags in ``--name=value`` form, empty when no option is set.
+            CLI flags in ``--name=value`` form, empty when no option is set
+            and the host has no hardware video encoder.
+
+        Raises:
+            ValueError: ``frames`` is a list that is not ``[start, end]``, or
+                ``encode`` is not ``"auto"`` or ``"crf"``.
         """
+        encode = opts.get("encode") or "auto"
+        if encode not in ("auto", "crf"):
+            raise ValueError(f"render encode must be 'auto' or 'crf', got {encode!r}")
         flags: list[str] = []
         frames = opts.get("frames")
         if isinstance(frames, (list, tuple)):
@@ -2013,6 +2042,14 @@ class VideoCompose(BaseTool):
             flags.append(f"--concurrency={opts['concurrency']}")
         if opts.get("gl"):
             flags.append(f"--gl={opts['gl']}")
+
+        final_quality = (
+            not any(flag.startswith(("--frames=", "--scale=", "--x264-preset=")) for flag in flags)
+            and opts.get("crf") is None
+            and encode == "auto"
+        )
+        if final_quality:
+            flags.extend(remotion_encode_flags())
         return flags
 
     def _remotion_render(self, inputs: dict[str, Any]) -> ToolResult:

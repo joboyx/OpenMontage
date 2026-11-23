@@ -40,6 +40,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from lib.render_profile import remotion_encode_flags
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -329,13 +330,16 @@ class RemotionCaptionBurn(BaseTool):
         # Render (use npx.cmd on Windows for subprocess compatibility)
         import sys
         npx_bin = "npx.cmd" if sys.platform == "win32" else "npx"
+        # Full-length final render: hardware encode where the host has it,
+        # else x264 at CRF 18. Remotion rejects --crf with --video-bitrate.
+        encode_flags = remotion_encode_flags() or ["--crf=18"]
         render_cmd = [
             npx_bin, "remotion", "render",
             "TalkingHead",
             f"--props={props_file.relative_to(root)}",
             f"--width={width}", f"--height={height}", "--fps=30",
             f"--frames=0-{total_frames - 1}",
-            "--codec=h264", "--crf=18",
+            "--codec=h264", *encode_flags,
             f"--output={str(Path(output_path).resolve())}",
         ]
         self.run_command(render_cmd, cwd=str(root))
