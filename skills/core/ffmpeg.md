@@ -61,6 +61,10 @@ cmd = ["ffmpeg", "-y", *decode_args, "-i", src, "-vf", vf, *encode_args, out]
 - Do not use ProRes intermediates for Remotion `OffthreadVideo` sources. The 10-bit ProRes software decode made the Remotion render slower (103 s against 52–69 s with H.264 sources).
 - `OPENMONTAGE_HW_VIDEO=0` forces the CPU path.
 
+### H.264 Encodes
+
+For any other H.264 encode, get the codec arguments from `lib.render_profile.ffmpeg_h264_encode_args(crf, preset)`; the caller still adds `-pix_fmt`. On an Apple Silicon Mac with VideoToolbox it returns `h264_videotoolbox -q:v <q>`; elsewhere `libx264 -crf <crf> -preset <preset>`. Where a tool input names the codec, `ffmpeg_video_codec_args(codec, crf, preset)` uses it for `libx264` and passes any other codec through; a command with no `-c:v` uses `ffmpeg_default_h264_args(output_path)`, which adds the CRF 23 arguments only for `.mp4`, `.mov` and `.m4v` outputs. The CRF to `-q:v` map is the smallest q with a VMAF at least that of libx264 on two test clips: CRF 12 → 90, 16 → 85, 18 → 80, 20 → 75, 23 → 70, 28 → 55 (interpolated between, clamped outside); CRF 0 (lossless) stays on libx264. At equal VMAF the VideoToolbox file is about 1.7–2.9 times larger than the libx264 file. Do not add `-hwaccel` by default: a decode-only 4K VP9 pass with a CPU crop/scale measured slower with `-hwaccel videotoolbox` (9.5–12.9 s against 5.8–9.7 s); the hardware gain is in the encode.
+
 ### Subtitle Burn-in
 
 - Prefer SRT format for simple word subtitles.
