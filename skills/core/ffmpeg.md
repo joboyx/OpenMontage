@@ -45,6 +45,22 @@ Each step is optional and gracefully skipped if the tool is unavailable.
 - Re-encode (`-c:v libx264`) when applying filters (speed change, subtitles, overlays, scaling).
 - Default CRF is 23. Use 18-20 for higher quality when the output is the final deliverable.
 
+### Intermediate Files
+
+For a prep step whose output feeds a later render (crop, scale, trim of a source clip), get the codec arguments from `lib.render_profile.ffmpeg_intermediate_args()`:
+
+```python
+from lib.render_profile import ffmpeg_intermediate_args
+
+decode_args, encode_args = ffmpeg_intermediate_args()
+cmd = ["ffmpeg", "-y", *decode_args, "-i", src, "-vf", vf, *encode_args, out]
+```
+
+- On macOS with VideoToolbox: `-hwaccel videotoolbox` decode and `h264_videotoolbox -b:v 80M` encode. Elsewhere: libx264 CRF 10, preset medium. Both use `yuv420p`.
+- Measured on a crop/scale of a 4K VP9 source (Apple M5 Pro): 32 s with hardware against 69 s with libx264 CRF 10 preset medium.
+- Do not use ProRes intermediates for Remotion `OffthreadVideo` sources. The 10-bit ProRes software decode made the Remotion render slower (103 s against 52–69 s with H.264 sources).
+- `OPENMONTAGE_HW_VIDEO=0` forces the CPU path.
+
 ### Subtitle Burn-in
 
 - Prefer SRT format for simple word subtitles.

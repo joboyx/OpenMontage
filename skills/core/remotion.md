@@ -218,6 +218,31 @@ Measured on a 63 s, 1080x1920, 30 fps CinematicRenderer video (Apple M5 Pro): fu
 - Do not raise `concurrency` without a benchmark on an idle machine (`npx remotion benchmark`). On a loaded machine, concurrency 12 was slower than the default.
 - Before you send a draft or a frame-range file to the user, say that it is not the final render. The Post-Render Verification Protocol below applies to the final render.
 
+#### Final render encode
+
+On macOS with VideoToolbox, a final-quality render (no `draft`, `frames`, `scale`, `x264_preset` or `crf`) gets three flags from `lib/render_profile.py` (`remotion_encode_flags()`) automatically:
+
+`--hardware-acceleration=if-possible --video-bitrate=16M --offthreadvideo-threads=<cores / 2>`
+
+Other hosts keep Remotion's CPU defaults (libx264, CRF). `video_compose` and `remotion_caption_burn` both use it. To keep x264/CRF output (for example when an exact CRF file is needed), set `render_speed: {"encode": "crf"}` (atelier: `bespoke.encode`, or set `bespoke.crf`). `OPENMONTAGE_HW_VIDEO=0` forces the CPU path for every tool.
+
+Measured on one clip (Apple M5 Pro, 15 cores; 1080x1920, 60 fps, 1,124 frames; noise about ±15 s, one run per variant):
+
+| Variant | Render |
+| --- | --- |
+| Baseline: libx264 CRF 16, preset slow | 52–69 s |
+| Hardware encode + `--offthreadvideo-threads=8` | **40 s** |
+| Hardware encode alone | 55 s (no gain) |
+| `--offthreadvideo-threads=8` alone | 60 s (no gain) |
+| `--gl=angle` | 72 s (no gain: Chrome screenshots cost only 47 ms/frame) |
+| `--x264-preset=medium` | 67 s (no gain) |
+| Pre-bundling | no gain (the bundle takes 2 s) |
+| ProRes HQ intermediate source files | 103 s (slower: 10-bit ProRes software decode) |
+
+The two flags need each other: the hardware encoder frees CPU cores, and the extra OffthreadVideo decode threads use them. Quality against the CRF 16 file: VMAF 96.2, SSIM 0.991, no visible difference at 2x zoom; the file is 38.6 MB against 31.7 MB. Short-form platforms serve such clips at about 1 Mb/s.
+
+Project-local render scripts must import `lib.render_profile` (`remotion_encode_flags()`) instead of hardcoding `--crf` / `--x264-preset` flags. Do not add `--crf` when the list is not empty: Remotion rejects `--crf` together with `--video-bitrate`.
+
 ### Media Profile Mapping
 
 | OpenMontage Profile | Remotion Config |
