@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
+from lib.render_profile import ffmpeg_default_h264_args, ffmpeg_video_codec_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -463,7 +464,7 @@ class VideoStitch(BaseTool):
             "-i", str(clip_path),
             "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2",
             "-r", str(fps),
-            "-c:v", video_codec, "-crf", str(crf), "-preset", preset,
+            *ffmpeg_video_codec_args(video_codec, crf, preset),
             "-c:a", audio_codec, "-ar", "44100", "-ac", "2",
             "-pix_fmt", "yuv420p",
             str(output_path),
@@ -630,6 +631,7 @@ class VideoStitch(BaseTool):
                 f"[0:v][1:v]xfade=transition=fade:duration={duration}:offset={self._get_xfade_offset(probes, 0, duration)}[v];"
                 f"[0:a][1:a]acrossfade=d={duration}[a]",
                 "-map", "[v]", "-map", "[a]",
+                *ffmpeg_default_h264_args(output_path),
                 str(output_path),
             ]
             self.run_command(cmd)
@@ -655,6 +657,7 @@ class VideoStitch(BaseTool):
                 f"[0:v][1:v]xfade=transition=fadeblack:duration={duration}:offset={self._get_xfade_offset(probes, 0, duration)}[v];"
                 f"[0:a][1:a]acrossfade=d={duration}[a]",
                 "-map", "[v]", "-map", "[a]",
+                *ffmpeg_default_h264_args(output_path),
                 str(output_path),
             ]
             self.run_command(cmd)
@@ -737,6 +740,7 @@ class VideoStitch(BaseTool):
         cmd.extend(input_args)
         cmd.extend(["-filter_complex", filter_complex])
         cmd.extend(["-map", "[vout]", "-map", "[aout]"])
+        cmd.extend(ffmpeg_default_h264_args(output_path))
         cmd.append(str(output_path))
         self.run_command(cmd)
 
@@ -871,7 +875,7 @@ class VideoStitch(BaseTool):
         cmd.extend([
             "-filter_complex", filter_complex,
             "-map", "[v]", "-map", "[a]",
-            "-c:v", codec, "-crf", str(crf),
+            *ffmpeg_video_codec_args(codec, crf),
             "-c:a", "aac",
             "-shortest",
             str(output_path),
@@ -898,7 +902,7 @@ class VideoStitch(BaseTool):
         cmd.extend([
             "-filter_complex", filter_complex,
             "-map", "[v]", "-map", "[a]",
-            "-c:v", codec, "-crf", str(crf),
+            *ffmpeg_video_codec_args(codec, crf),
             "-c:a", "aac",
             "-shortest",
             str(output_path),
@@ -940,7 +944,7 @@ class VideoStitch(BaseTool):
         cmd.extend([
             "-filter_complex", filter_complex,
             "-map", "[v]", "-map", "0:a?",
-            "-c:v", codec, "-crf", str(crf),
+            *ffmpeg_video_codec_args(codec, crf),
             "-c:a", "aac",
             "-shortest",
             str(output_path),

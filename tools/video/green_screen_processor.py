@@ -21,6 +21,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from lib.render_profile import ffmpeg_h264_encode_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -596,9 +597,7 @@ class GreenScreenProcessor(BaseTool):
             "-framerate", str(fps),
             "-i", str(frames_dir / "frame_%06d.png"),
             "-vf", f"scale={width}:{height}:flags=lanczos",
-            "-c:v", "libx264",
-            "-crf", "18",
-            "-preset", "fast",
+            *ffmpeg_h264_encode_args(18, "fast"),
             "-pix_fmt", "yuv420p",
             str(output_path),
         ]

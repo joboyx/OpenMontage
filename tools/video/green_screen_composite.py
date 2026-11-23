@@ -19,6 +19,7 @@ from typing import Any
 import numpy as np
 from PIL import Image
 
+from lib.render_profile import ffmpeg_h264_encode_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -393,7 +394,7 @@ class GreenScreenComposite(BaseTool):
             "ffmpeg", "-y",
             "-framerate", str(fps),
             "-i", str(frames_dir / "frame_%06d.png"),
-            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+            *ffmpeg_h264_encode_args(18, "fast"),
             "-pix_fmt", "yuv420p",
             "-vf", f"scale={width}:{height}",
             str(output_path),

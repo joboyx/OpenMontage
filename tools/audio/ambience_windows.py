@@ -30,6 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Optional
 
+from lib.render_profile import ffmpeg_h264_encode_args
 from tools.analysis.audio_probe import probe_duration
 from tools.base_tool import (
     _EXECUTE_DEPTH,
@@ -534,8 +535,8 @@ class AmbienceWindows(BaseTool):
             try:
                 self.run_command(
                     ["ffmpeg", "-y", "-loglevel", "error", "-ss", str(win_start), "-t", str(window),
-                     "-i", str(inputs["timeline"]), "-an", "-c:v", "libx264", "-crf", "20",
-                     "-preset", "veryfast", str(seg)]
+                     "-i", str(inputs["timeline"]), "-an",
+                     *ffmpeg_h264_encode_args(20, "veryfast"), str(seg)]
                 )
                 res = mm.execute({
                     "video": str(seg),

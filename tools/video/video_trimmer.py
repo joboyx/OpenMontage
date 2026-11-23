@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from lib.render_profile import ffmpeg_h264_encode_args, ffmpeg_video_codec_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -128,7 +129,7 @@ class VideoTrimmer(BaseTool):
         if codec == "copy":
             cmd.extend(["-c", "copy"])
         else:
-            cmd.extend(["-c:v", codec, "-c:a", "aac"])
+            cmd.extend([*ffmpeg_video_codec_args(codec), "-c:a", "aac"])
         cmd.append(str(output_path))
 
         self.run_command(cmd)
@@ -165,7 +166,7 @@ class VideoTrimmer(BaseTool):
             "-i", str(input_path),
             "-filter:v", video_filter,
             "-filter:a", audio_filters,
-            "-c:v", "libx264", "-preset", "fast",
+            *ffmpeg_h264_encode_args(23, "fast"),
             "-c:a", "aac",
             str(output_path),
         ]

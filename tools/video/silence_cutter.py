@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lib.render_profile import ffmpeg_video_codec_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -318,7 +319,7 @@ class SilenceCutter(BaseTool):
                     "-i", str(input_path),
                     "-ss", f"{seg['start']:.3f}",
                     "-to", f"{seg['end']:.3f}",
-                    "-c:v", codec, "-crf", str(crf), "-preset", "fast",
+                    *ffmpeg_video_codec_args(codec, crf, "fast"),
                     "-c:a", "aac", "-b:a", "192k",
                     # Force keyframe at start for clean cuts
                     "-force_key_frames", f"{seg['start']:.3f}",
@@ -410,7 +411,7 @@ class SilenceCutter(BaseTool):
                         "-i", str(input_path),
                         "-ss", f"{seg['start']:.3f}",
                         "-to", f"{seg['end']:.3f}",
-                        "-c:v", codec, "-crf", str(crf), "-preset", "fast",
+                        *ffmpeg_video_codec_args(codec, crf, "fast"),
                         "-c:a", "aac", "-b:a", "192k",
                         str(seg_path),
                     ]
@@ -429,7 +430,7 @@ class SilenceCutter(BaseTool):
                             f"atrim=start={seg['start']:.6f}:end={seg['end']:.6f},"
                             f"asetpts=PTS-STARTPTS,{atempo_chain}"
                         ),
-                        "-c:v", codec, "-crf", str(crf), "-preset", "fast",
+                        *ffmpeg_video_codec_args(codec, crf, "fast"),
                         "-c:a", "aac", "-b:a", "192k",
                         str(seg_path),
                     ]

@@ -40,7 +40,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from lib.render_profile import remotion_encode_flags
+from lib.render_profile import ffmpeg_h264_encode_args, remotion_encode_flags
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -411,7 +411,7 @@ class RemotionCaptionBurn(BaseTool):
                     "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
                     "Outline=3,Shadow=2,Alignment=2,MarginV=100'"
                 ),
-                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                *ffmpeg_h264_encode_args(18, "fast"),
                 "-pix_fmt", "yuv420p",
                 "-c:a", "copy",
                 output_path,

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lib.render_profile import ffmpeg_h264_encode_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -249,7 +250,7 @@ class Upscale(BaseTool):
                 "-i", str(input_path),
                 "-map", "0:v",
                 "-map", "1:a?",
-                "-c:v", "libx264", "-crf", "18",
+                *ffmpeg_h264_encode_args(18),
                 "-c:a", "copy",
                 "-pix_fmt", "yuv420p",
                 str(output_path),

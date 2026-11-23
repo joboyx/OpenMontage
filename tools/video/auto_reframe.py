@@ -19,6 +19,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lib.render_profile import ffmpeg_video_codec_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -436,7 +437,7 @@ class AutoReframe(BaseTool):
             "ffmpeg", "-y",
             "-i", str(input_path),
             "-vf", vf,
-            "-c:v", codec, "-crf", str(crf), "-preset", "fast",
+            *ffmpeg_video_codec_args(codec, crf, "fast"),
             "-c:a", "aac", "-b:a", "192k",
             str(output_path),
         ]
@@ -506,7 +507,7 @@ class AutoReframe(BaseTool):
             "ffmpeg", "-y",
             "-i", str(input_path),
             "-vf", vf,
-            "-c:v", codec, "-crf", str(crf), "-preset", "fast",
+            *ffmpeg_video_codec_args(codec, crf, "fast"),
             "-c:a", "aac", "-b:a", "192k",
             str(output_path),
         ]

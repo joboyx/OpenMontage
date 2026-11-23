@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lib.render_profile import ffmpeg_video_codec_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -148,7 +149,7 @@ class FaceEnhance(BaseTool):
             "ffmpeg", "-y",
             "-i", str(input_path),
             "-vf", vf,
-            "-c:v", codec, "-crf", str(crf),
+            *ffmpeg_video_codec_args(codec, crf),
             "-c:a", "copy",
             str(output_path),
         ]

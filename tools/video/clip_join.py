@@ -32,6 +32,7 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, Iterator
 
+from lib.render_profile import ffmpeg_h264_encode_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -291,8 +292,8 @@ class ClipJoin(BaseTool):
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         enc = subprocess.Popen(
             ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
-             "-s", f"{width}x{height}", "-r", str(fps), "-i", "-", "-c:v", "libx264",
-             "-crf", str(crf), "-preset", "slow", "-pix_fmt", "yuv420p", output_path],
+             "-s", f"{width}x{height}", "-r", str(fps), "-i", "-",
+             *ffmpeg_h264_encode_args(crf, "slow"), "-pix_fmt", "yuv420p", output_path],
             stdin=subprocess.PIPE, stderr=subprocess.PIPE,
         )
 

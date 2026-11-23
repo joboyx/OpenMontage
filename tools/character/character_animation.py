@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lib.render_profile import ffmpeg_default_h264_args
 from schemas.artifacts import validate_artifact
 from tools.base_tool import (
     BaseTool,
@@ -99,6 +100,7 @@ def _render_preview_mp4(preview_path: Path, video_path: Path, duration_seconds: 
         str(fps),
         "-pix_fmt",
         "yuv420p",
+        *ffmpeg_default_h264_args(video_path),
         str(video_path),
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)

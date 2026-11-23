@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lib.render_profile import ffmpeg_h264_encode_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -239,7 +240,7 @@ class EyeEnhance(BaseTool):
             "ffmpeg", "-y",
             "-i", str(temp_video),
             "-i", str(input_path),
-            "-c:v", "libx264", "-crf", str(crf), "-preset", "fast",
+            *ffmpeg_h264_encode_args(crf, "fast"),
             "-c:a", "aac", "-b:a", "192k",
             "-map", "0:v:0", "-map", "1:a:0?",
             "-shortest",
@@ -507,7 +508,7 @@ class EyeEnhance(BaseTool):
             "ffmpeg", "-y",
             "-i", str(temp_video),
             "-i", str(input_path),
-            "-c:v", "libx264", "-crf", str(crf), "-preset", "fast",
+            *ffmpeg_h264_encode_args(crf, "fast"),
             "-c:a", "aac", "-b:a", "192k",
             "-map", "0:v:0", "-map", "1:a:0?",
             "-shortest",
@@ -551,7 +552,7 @@ class EyeEnhance(BaseTool):
             "ffmpeg", "-y",
             "-i", str(input_path),
             "-vf", f"eq=brightness={brightness}:contrast={contrast}",
-            "-c:v", "libx264", "-crf", str(crf), "-preset", "fast",
+            *ffmpeg_h264_encode_args(crf, "fast"),
             "-c:a", "copy",
             str(output_path),
         ]

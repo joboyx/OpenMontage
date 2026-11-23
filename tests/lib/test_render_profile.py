@@ -8,9 +8,13 @@ import pytest
 
 from lib import render_profile
 from lib.render_profile import (
+    ffmpeg_default_h264_args,
+    ffmpeg_h264_encode_args,
     ffmpeg_intermediate_args,
+    ffmpeg_video_codec_args,
     hardware_video_available,
     offthread_threads,
+    videotoolbox_quality,
 )
 
 ENCODERS_WITH_VT = (
@@ -28,8 +32,12 @@ def _fresh_probe(monkeypatch):
     render_profile._videotoolbox_encoder_listed.cache_clear()
 
 
-def _host(monkeypatch, *, system="Darwin", ffmpeg="/opt/bin/ffmpeg", encoders=ENCODERS_WITH_VT):
+def _host(
+    monkeypatch, *, system="Darwin", machine="arm64", ffmpeg="/opt/bin/ffmpeg",
+    encoders=ENCODERS_WITH_VT,
+):
     monkeypatch.setattr("platform.system", lambda: system)
+    monkeypatch.setattr("platform.machine", lambda: machine)
     monkeypatch.setattr("shutil.which", lambda name: ffmpeg if name == "ffmpeg" else None)
     monkeypatch.setattr(
         "subprocess.run",
@@ -40,6 +48,11 @@ def _host(monkeypatch, *, system="Darwin", ffmpeg="/opt/bin/ffmpeg", encoders=EN
 def test_darwin_with_videotoolbox_encoder_is_available(monkeypatch):
     _host(monkeypatch)
     assert hardware_video_available() is True
+
+
+def test_intel_mac_is_not_available(monkeypatch):
+    _host(monkeypatch, machine="x86_64")
+    assert hardware_video_available() is False
 
 
 def test_darwin_without_videotoolbox_encoder_is_not_available(monkeypatch):
@@ -104,3 +117,84 @@ def test_intermediate_args_cpu(monkeypatch):
 def test_offthread_threads(monkeypatch, cpu_count, expected):
     monkeypatch.setattr("os.cpu_count", lambda: cpu_count)
     assert offthread_threads() == expected
+
+
+def _hardware(monkeypatch, available: bool) -> None:
+    monkeypatch.setattr(render_profile, "hardware_video_available", lambda: available)
+
+
+@pytest.mark.parametrize(
+    ("crf", "expected"),
+    [
+        # Measured points.
+        (12, 90), (16, 85), (18, 80), (20, 75), (23, 70), (28, 55),
+        # Interpolated between points.
+        (14, 88), (22, 72), (25, 64),
+        # Clamped outside the measured range.
+        (1, 90), (10, 90), (30, 55), (51, 55),
+    ],
+)
+def test_videotoolbox_quality(crf, expected):
+    assert videotoolbox_quality(crf) == expected
+
+
+def test_h264_args_hardware(monkeypatch):
+    _hardware(monkeypatch, True)
+    assert ffmpeg_h264_encode_args(18, "fast") == ["-c:v", "h264_videotoolbox", "-q:v", "80"]
+
+
+def test_h264_args_hardware_defaults(monkeypatch):
+    _hardware(monkeypatch, True)
+    assert ffmpeg_h264_encode_args() == ["-c:v", "h264_videotoolbox", "-q:v", "70"]
+
+
+def test_h264_args_cpu(monkeypatch):
+    _hardware(monkeypatch, False)
+    assert ffmpeg_h264_encode_args(18, "fast") == [
+        "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+    ]
+    assert ffmpeg_h264_encode_args() == ["-c:v", "libx264", "-crf", "23", "-preset", "medium"]
+
+
+def test_h264_lossless_stays_on_libx264_with_hardware(monkeypatch):
+    _hardware(monkeypatch, True)
+    assert ffmpeg_h264_encode_args(0, "medium") == [
+        "-c:v", "libx264", "-crf", "0", "-preset", "medium",
+    ]
+
+
+def test_video_codec_args_libx264_uses_hardware(monkeypatch):
+    _hardware(monkeypatch, True)
+    assert ffmpeg_video_codec_args("libx264", 20, "medium") == [
+        "-c:v", "h264_videotoolbox", "-q:v", "75",
+    ]
+
+
+def test_video_codec_args_libx264_cpu_fills_defaults(monkeypatch):
+    _hardware(monkeypatch, False)
+    assert ffmpeg_video_codec_args("libx264") == [
+        "-c:v", "libx264", "-crf", "23", "-preset", "medium",
+    ]
+
+
+def test_video_codec_args_explicit_codec_passes_through(monkeypatch):
+    _hardware(monkeypatch, True)
+    assert ffmpeg_video_codec_args("libx265", 28, "slow") == [
+        "-c:v", "libx265", "-crf", "28", "-preset", "slow",
+    ]
+    assert ffmpeg_video_codec_args("libvpx-vp9", 30) == ["-c:v", "libvpx-vp9", "-crf", "30"]
+    assert ffmpeg_video_codec_args("prores_ks") == ["-c:v", "prores_ks"]
+
+
+@pytest.mark.parametrize("name", ["out.mp4", "out.MOV", "dir.x/out.m4v"])
+def test_default_h264_args_for_h264_containers(monkeypatch, name):
+    _hardware(monkeypatch, True)
+    assert ffmpeg_default_h264_args(name) == ["-c:v", "h264_videotoolbox", "-q:v", "70"]
+    _hardware(monkeypatch, False)
+    assert ffmpeg_default_h264_args(name) == ["-c:v", "libx264", "-crf", "23", "-preset", "medium"]
+
+
+@pytest.mark.parametrize("name", ["out.webm", "out.mkv", "out.gif", "out"])
+def test_default_h264_args_leave_other_containers_alone(monkeypatch, name):
+    _hardware(monkeypatch, True)
+    assert ffmpeg_default_h264_args(name) == []

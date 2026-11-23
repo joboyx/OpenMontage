@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lib.render_profile import ffmpeg_h264_encode_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -286,7 +287,7 @@ class ShowcaseCard(BaseTool):
                 "ffmpeg", "-y",
                 "-i", input_path,
                 "-vf", vf,
-                "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                *ffmpeg_h264_encode_args(18, "fast"),
                 "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-b:a", "192k",
                 output_path,

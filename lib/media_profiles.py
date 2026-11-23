@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
+from lib.render_profile import ffmpeg_video_codec_args
+
 
 class AspectRatio(str, Enum):
     LANDSCAPE_16_9 = "16:9"
@@ -153,11 +155,22 @@ def get_profiles_for_platform(platform: str) -> list[MediaProfile]:
 
 
 def ffmpeg_output_args(profile: MediaProfile) -> list[str]:
-    """Generate FFmpeg output arguments for a media profile."""
+    """Generate FFmpeg output arguments for a media profile.
+
+    The video codec arguments come from the shared render profile, so a
+    ``libx264`` profile uses the VideoToolbox H.264 encoder on an Apple
+    Silicon Mac.
+
+    Args:
+        profile: The media profile to encode for.
+
+    Returns:
+        The output arguments: codecs with quality, pixel format, frame rate
+        and the scale filter.
+    """
     args = [
-        "-c:v", profile.codec,
+        *ffmpeg_video_codec_args(profile.codec, profile.crf),
         "-c:a", profile.audio_codec,
-        "-crf", str(profile.crf),
         "-pix_fmt", profile.pixel_format,
         "-r", str(profile.fps),
         "-vf", f"scale={profile.width}:{profile.height}",

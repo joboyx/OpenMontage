@@ -42,7 +42,7 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import unquote, urlsplit
 
-from lib.render_profile import remotion_encode_flags
+from lib.render_profile import ffmpeg_video_codec_args, remotion_encode_flags
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -593,7 +593,7 @@ class VideoCompose(BaseTool):
                     # cuts because it snaps to keyframes. With sparse GOPs (common
                     # in Pexels / AI-generated clips), stream-copy can produce
                     # segments significantly longer than `duration`, breaking the
-                    # target timeline. Re-encoding with libx264/AAC is slower but
+                    # target timeline. Re-encoding to H.264/AAC is slower but
                     # gives exact cut boundaries. Same resolution in → same
                     # resolution out, so same-res inputs concat cleanly.
                     cmd = [
@@ -635,9 +635,7 @@ class VideoCompose(BaseTool):
                         cmd.extend(["-filter:a", ",".join(af_parts)])
 
                     cmd.extend([
-                        "-c:v", codec,
-                        "-crf", str(crf),
-                        "-preset", preset,
+                        *ffmpeg_video_codec_args(codec, crf, preset),
                         "-pix_fmt", "yuv420p",
                         "-r", "30",
                     ])
@@ -670,9 +668,7 @@ class VideoCompose(BaseTool):
                         cmd.extend([
                             "-map", "0:v:0",
                             "-map", "1:a:0",
-                            "-c:v", codec,
-                            "-crf", str(crf),
-                            "-preset", preset,
+                            *ffmpeg_video_codec_args(codec, crf, preset),
                             "-pix_fmt", "yuv420p",
                             "-r", "30",
                             "-c:a", "aac",
@@ -735,7 +731,7 @@ class VideoCompose(BaseTool):
             if needs_reencode:
                 if vfilters:
                     cmd.extend(["-vf", ",".join(vfilters)])
-                cmd.extend(["-c:v", codec, "-crf", str(crf), "-preset", preset])
+                cmd.extend(ffmpeg_video_codec_args(codec, crf, preset))
                 cmd.extend(profile_flags)
             else:
                 cmd.extend(["-c:v", "copy"])
@@ -2844,7 +2840,7 @@ class VideoCompose(BaseTool):
             "ffmpeg", "-y",
             "-i", str(input_path),
             "-vf", f"subtitles='{sub_escaped}':force_style='{ass_style}'",
-            "-c:v", codec, "-crf", str(crf),
+            *ffmpeg_video_codec_args(codec, crf),
             "-c:a", "copy",
             str(output_path),
         ]
@@ -2915,7 +2911,7 @@ class VideoCompose(BaseTool):
         cmd.extend(input_args)
         cmd.extend(["-filter_complex", filter_complex])
         cmd.extend(["-map", f"[{prev_label}]", "-map", "0:a?"])
-        cmd.extend(["-c:v", codec, "-crf", str(crf), "-c:a", "copy"])
+        cmd.extend([*ffmpeg_video_codec_args(codec, crf), "-c:a", "copy"])
         cmd.append(str(output_path))
 
         self.run_command(cmd)
@@ -2945,7 +2941,7 @@ class VideoCompose(BaseTool):
         cmd = [
             "ffmpeg", "-y",
             "-i", str(input_path),
-            "-c:v", codec, "-crf", str(crf), "-preset", preset,
+            *ffmpeg_video_codec_args(codec, crf, preset),
             "-c:a", "aac", "-b:a", "192k",
         ]
 

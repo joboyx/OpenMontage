@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from lib.render_profile import ffmpeg_h264_encode_args
 from tools.base_tool import (
     BaseTool,
     Determinism,
@@ -335,7 +336,9 @@ class ScreenRecorder(BaseTool):
         else:
             cmd += ["-i", f"{screen_index}:{audio_idx}"]
 
-        cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"]
+        # The hardware encoder keeps up with live capture without the CPU
+        # load of libx264, so the profile helper applies here too.
+        cmd += ffmpeg_h264_encode_args(23, "ultrafast")
         if capture_audio and audio_idx != "none":
             cmd += ["-c:a", "aac", "-b:a", "128k"]
         cmd += ["-pix_fmt", "yuv420p"]

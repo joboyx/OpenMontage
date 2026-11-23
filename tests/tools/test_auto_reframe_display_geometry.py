@@ -14,6 +14,12 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def _cpu_encode(video_hardware):
+    # The pixel oracles are libx264 encodes, so the tool must encode with libx264 too.
+    video_hardware(False)
+
+
 def run(command):
     return subprocess.run(command, check=True, capture_output=True, timeout=10).stdout
 
